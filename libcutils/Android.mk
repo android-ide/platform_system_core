@@ -80,28 +80,7 @@ else
 endif
 
 
-# Static library for host
-# ========================================================
-LOCAL_MODULE := libcutils
-LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
-LOCAL_LDLIBS := -lpthread
-LOCAL_STATIC_LIBRARIES := liblog
-LOCAL_CFLAGS += $(hostSmpFlag)
-include $(BUILD_HOST_STATIC_LIBRARY)
-
-
-# Static library for host, 64-bit
-# ========================================================
-include $(CLEAR_VARS)
-LOCAL_MODULE := lib64cutils
-LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
-LOCAL_LDLIBS := -lpthread
-LOCAL_STATIC_LIBRARIES := lib64log
-LOCAL_CFLAGS += $(hostSmpFlag) -m64
-include $(BUILD_HOST_STATIC_LIBRARY)
-
-
-# Shared and static library for target
+# Static library for target
 # ========================================================
 
 # This is needed in LOCAL_C_INCLUDES to access the C library's private
@@ -132,23 +111,11 @@ LOCAL_SRC_FILES += memory.c
 endif # !x86-atom
 endif # !arm
 
+LOCAL_CFLAGS += -DHAVE_PTHREADS -DHAVE_SCHED_H -DHAVE_SYS_UIO_H -DHAVE_ANDROID_OS -DHAVE_IOCTL -DHAVE_TM_GMTOF -DHAVE_SYS_SOCKET_H
+
 LOCAL_C_INCLUDES := $(libcutils_c_includes) $(KERNEL_HEADERS)
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(targetSmpFlag)
 include $(BUILD_STATIC_LIBRARY)
 
-include $(CLEAR_VARS)
-LOCAL_MODULE := libcutils
-LOCAL_WHOLE_STATIC_LIBRARIES := libcutils
-LOCAL_SHARED_LIBRARIES := liblog
-LOCAL_CFLAGS += $(targetSmpFlag)
-LOCAL_C_INCLUDES := $(libcutils_c_includes)
-include $(BUILD_SHARED_LIBRARY)
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := tst_str_parms
-LOCAL_CFLAGS += -DTEST_STR_PARMS
-LOCAL_SRC_FILES := str_parms.c hashmap.c memory.c
-LOCAL_SHARED_LIBRARIES := liblog
-LOCAL_MODULE_TAGS := optional
-include $(BUILD_EXECUTABLE)
