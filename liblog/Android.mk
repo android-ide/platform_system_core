@@ -46,4 +46,5 @@ liblog_host_sources := $(liblog_sources) fake_log_device.c
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_SRC_FILES := $(liblog_sources)
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
 include $(BUILD_STATIC_LIBRARY)
