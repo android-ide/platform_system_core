@@ -47,4 +47,5 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_SRC_FILES := $(liblog_sources)
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
+LOCAL_CFLAGS += -DHAVE_SYS_UIO_H
 include $(BUILD_STATIC_LIBRARY)
