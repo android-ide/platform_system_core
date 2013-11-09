@@ -206,8 +206,9 @@ int expand_props(char *dst, const char *src, int dst_size)
     while (*src_ptr && left > 0) {
         char *c;
         char prop[PROP_NAME_MAX + 1];
-        const char *prop_val;
+        char prop_val[PROP_VALUE_MAX];
         int prop_len = 0;
+        int prop_val_len;
 
         c = strchr(src_ptr, '$');
         if (!c) {
@@ -265,14 +266,14 @@ int expand_props(char *dst, const char *src, int dst_size)
             goto err;
         }
 
-        prop_val = property_get(prop);
-        if (!prop_val) {
+        prop_val_len = property_get(prop, prop_val);
+        if (!prop_val_len) {
             ERROR("property '%s' doesn't exist while expanding '%s'\n",
                   prop, src);
             goto err;
         }
 
-        ret = push_chars(&dst_ptr, &left, prop_val, strlen(prop_val));
+        ret = push_chars(&dst_ptr, &left, prop_val, prop_val_len);
         if (ret < 0)
             goto err_nospace;
         src_ptr = c;
@@ -543,7 +544,7 @@ void queue_all_property_triggers()
             const char* equals = strchr(name, '=');
             if (equals) {
                 char prop_name[PROP_NAME_MAX + 1];
-                const char* value;
+                char value[PROP_VALUE_MAX];
                 int length = equals - name;
                 if (length > PROP_NAME_MAX) {
                     ERROR("property name too long in trigger %s", act->name);
@@ -552,9 +553,8 @@ void queue_all_property_triggers()
                     prop_name[length] = 0;
 
                     /* does the property exist, and match the trigger value? */
-                    value = property_get(prop_name);
-                    if (value && (!strcmp(equals + 1, value) ||
-                                  !strcmp(equals + 1, "*"))) {
+                    property_get(prop_name, value);
+                    if (!strcmp(equals + 1, value) ||!strcmp(equals + 1, "*")) {
                         action_add_queue_tail(act);
                     }
                 }
@@ -571,6 +571,7 @@ void queue_builtin_action(int (*func)(int nargs, char **args), char *name)
     act = calloc(1, sizeof(*act));
     act->name = name;
     list_init(&act->commands);
+    list_init(&act->qlist);
 
     cmd = calloc(1, sizeof(*cmd));
     cmd->func = func;
@@ -583,7 +584,9 @@ void queue_builtin_action(int (*func)(int nargs, char **args), char *name)
 
 void action_add_queue_tail(struct action *act)
 {
-    list_add_tail(&action_queue, &act->qlist);
+    if (list_empty(&act->qlist)) {
+        list_add_tail(&action_queue, &act->qlist);
+    }
 }
 
 struct action *action_remove_queue_head(void)
@@ -594,6 +597,7 @@ struct action *action_remove_queue_head(void)
         struct listnode *node = list_head(&action_queue);
         struct action *act = node_to_item(node, struct action, qlist);
         list_remove(node);
+        list_init(node);
         return act;
     }
 }
@@ -764,7 +768,7 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
         svc->envvars = ei;
         break;
     }
-    case K_socket: {/* name type perm [ uid gid ] */
+    case K_socket: {/* name type perm [ uid gid context ] */
         struct socketinfo *si;
         if (nargs < 4) {
             parse_error(state, "socket option requires name, type, perm arguments\n");
@@ -787,6 +791,8 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
             si->uid = decode_uid(args[4]);
         if (nargs > 5)
             si->gid = decode_uid(args[5]);
+        if (nargs > 6)
+            si->socketcon = args[6];
         si->next = svc->sockets;
         svc->sockets = si;
         break;
@@ -825,6 +831,7 @@ static void *parse_action(struct parse_state *state, int nargs, char **args)
     act = calloc(1, sizeof(*act));
     act->name = args[1];
     list_init(&act->commands);
+    list_init(&act->qlist);
     list_add_tail(&action_list, &act->alist);
         /* XXX add to hash */
     return act;

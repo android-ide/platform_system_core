@@ -50,7 +50,7 @@ commonSources := \
 	threads.c \
 	sched_policy.c \
 	iosched_policy.c \
-	str_parms.c
+	str_parms.c \
 
 commonHostSources := \
         ashmem-host.c
@@ -75,7 +75,9 @@ ifeq ($(WINDOWS_HOST_ONLY),1)
 else
     commonSources += \
         abort_socket.c \
+        fs.c \
         selector.c \
+        multiuser.c \
         zygote.c
 endif
 
@@ -98,6 +100,7 @@ LOCAL_SRC_FILES := $(commonSources) \
         mq.c \
         partition_utils.c \
         qtaguid.c \
+        trace.c \
         uevent.c
 
 ifeq ($(TARGET_ARCH),arm)
@@ -107,7 +110,11 @@ ifeq ($(TARGET_ARCH_VARIANT),x86-atom)
 LOCAL_CFLAGS += -DHAVE_MEMSET16 -DHAVE_MEMSET32
 LOCAL_SRC_FILES += arch-x86/android_memset16.S arch-x86/android_memset32.S memory.c
 else # !x86-atom
+ifeq ($(TARGET_ARCH),mips)
+LOCAL_SRC_FILES += arch-mips/android_memset.c
+else # !mips
 LOCAL_SRC_FILES += memory.c
+endif # !mips
 endif # !x86-atom
 endif # !arm
 
@@ -118,4 +125,3 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(targetSmpFlag)
 include $(BUILD_STATIC_LIBRARY)
-

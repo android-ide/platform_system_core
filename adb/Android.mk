@@ -16,7 +16,8 @@ EXTRA_SRCS :=
 ifeq ($(HOST_OS),linux)
   USB_SRCS := usb_linux.c
   EXTRA_SRCS := get_my_path_linux.c
-  LOCAL_LDLIBS += -lrt -lncurses -lpthread
+  LOCAL_LDLIBS += -lrt -ldl -lpthread
+  LOCAL_CFLAGS += -DWORKAROUND_BUG6558362
 endif
 
 ifeq ($(HOST_OS),darwin)
@@ -33,16 +34,16 @@ endif
 
 ifeq ($(HOST_OS),windows)
   USB_SRCS := usb_windows.c
-  EXTRA_SRCS := get_my_path_windows.c
+  EXTRA_SRCS := get_my_path_windows.c ../libcutils/list.c
   EXTRA_STATIC_LIBS := AdbWinApi
   ifneq ($(strip $(USE_CYGWIN)),)
     # Pure cygwin case
-    LOCAL_LDLIBS += -lpthread
+    LOCAL_LDLIBS += -lpthread -lgdi32
     LOCAL_C_INCLUDES += /usr/include/w32api/ddk
   endif
   ifneq ($(strip $(USE_MINGW)),)
     # MinGW under Linux case
-    LOCAL_LDLIBS += -lws2_32
+    LOCAL_LDLIBS += -lws2_32 -lgdi32
     USE_SYSDEPS_WIN32 := 1
     LOCAL_C_INCLUDES += /usr/i586-mingw32msvc/include/ddk
   endif
@@ -57,6 +58,7 @@ LOCAL_SRC_FILES := \
 	transport_usb.c \
 	commandline.c \
 	adb_client.c \
+	adb_auth_host.c \
 	sockets.c \
 	services.c \
 	file_sync_client.c \
@@ -65,6 +67,7 @@ LOCAL_SRC_FILES := \
 	utils.c \
 	usb_vendors.c
 
+LOCAL_C_INCLUDES += external/openssl/include
 
 ifneq ($(USE_SYSDEPS_WIN32),)
   LOCAL_SRC_FILES += sysdeps_win32.c
@@ -75,15 +78,16 @@ endif
 LOCAL_CFLAGS += -O2 -g -DADB_HOST=1  -Wall -Wno-unused-parameter
 LOCAL_CFLAGS += -D_XOPEN_SOURCE -D_GNU_SOURCE
 LOCAL_MODULE := adb
+LOCAL_MODULE_TAGS := debug
 
-LOCAL_STATIC_LIBRARIES := libzipfile libunz $(EXTRA_STATIC_LIBS)
+LOCAL_STATIC_LIBRARIES := libzipfile libunz libcrypto_static $(EXTRA_STATIC_LIBS)
 ifeq ($(USE_SYSDEPS_WIN32),)
 	LOCAL_STATIC_LIBRARIES += libcutils
 endif
 
 include $(BUILD_HOST_EXECUTABLE)
 
-$(call dist-for-goals,dist_files,$(LOCAL_BUILT_MODULE))
+$(call dist-for-goals,dist_files sdk,$(LOCAL_BUILT_MODULE))
 
 ifeq ($(HOST_OS),windows)
 $(LOCAL_INSTALLED_MODULE): \
@@ -104,6 +108,7 @@ LOCAL_SRC_FILES := \
 	transport.c \
 	transport_local.c \
 	transport_usb.c \
+	adb_auth_client.c \
 	sockets.c \
 	services.c \
 	file_sync_service.c \
@@ -127,7 +132,7 @@ LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT_SBIN)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
 
-LOCAL_STATIC_LIBRARIES := libcutils libc
+LOCAL_STATIC_LIBRARIES := libcutils libc libmincrypt
 include $(BUILD_EXECUTABLE)
 
 
@@ -136,7 +141,7 @@ include $(BUILD_EXECUTABLE)
 ifneq ($(SDK_ONLY),true)
 include $(CLEAR_VARS)
 
-LOCAL_LDLIBS := -lrt -lncurses -lpthread
+LOCAL_LDLIBS := -lrt -ldl -lpthread
 
 LOCAL_SRC_FILES := \
 	adb.c \
@@ -146,6 +151,7 @@ LOCAL_SRC_FILES := \
 	transport_usb.c \
 	commandline.c \
 	adb_client.c \
+	adb_auth_host.c \
 	sockets.c \
 	services.c \
 	file_sync_client.c \
@@ -165,9 +171,13 @@ LOCAL_CFLAGS := \
 	-D_XOPEN_SOURCE \
 	-D_GNU_SOURCE
 
+LOCAL_C_INCLUDES += external/openssl/include
+
 LOCAL_MODULE := adb
 
 LOCAL_STATIC_LIBRARIES := libzipfile libunz libcutils
+
+LOCAL_SHARED_LIBRARIES := libcrypto
 
 include $(BUILD_EXECUTABLE)
 endif

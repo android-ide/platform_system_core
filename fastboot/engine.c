@@ -29,6 +29,7 @@
 #include "fastboot.h"
 #include "make_ext4fs.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -44,8 +45,6 @@
 #else
 #include <sys/mman.h>
 #endif
-
-extern struct fs_info info;
 
 #define ARRAY_SIZE(x)           (sizeof(x)/sizeof(x[0]))
 
@@ -143,6 +142,39 @@ struct generator {
 } generators[] = {
     { "ext4", generate_ext4_image, cleanup_image }
 };
+
+/* Return true if this partition is supported by the fastboot format command.
+ * It is also used to determine if we should first erase a partition before
+ * flashing it with an ext4 filesystem.  See needs_erase()
+ *
+ * Not all devices report the filesystem type, so don't report any errors,
+ * just return false.
+ */
+int fb_format_supported(usb_handle *usb, const char *partition)
+{
+    char response[FB_RESPONSE_SZ+1];
+    struct generator *generator = NULL;
+    int status;
+    unsigned int i;
+
+    status = fb_getvar(usb, response, "partition-type:%s", partition);
+    if (status) {
+        return 0;
+    }
+
+    for (i = 0; i < ARRAY_SIZE(generators); i++) {
+        if (!strncmp(generators[i].fs_type, response, FB_RESPONSE_SZ)) {
+            generator = &generators[i];
+            break;
+        }
+    }
+
+    if (generator) {
+        return 1;
+    }
+
+    return 0;
+}
 
 static int cb_default(Action *a, int status, char *resp)
 {
@@ -269,10 +301,7 @@ void generate_ext4_image(struct image_data *image)
 #else
     fd = fileno(tmpfile());
 #endif
-    /* reset ext4fs info so we can be called multiple times */
-    reset_ext4fs_info();
-    info.len = image->partition_size;
-    make_ext4fs_internal(fd, NULL, NULL, NULL, 0, 1, 0, 0, 0, NULL);
+    make_ext4fs_sparse_fd(fd, image->partition_size, NULL, NULL);
 
     fstat(fd, &st);
     image->image_size = st.st_size;
@@ -565,6 +594,8 @@ int fb_execute_queue(usb_handle *usb)
     int status = 0;
 
     a = action_list;
+    if (!a)
+        return status;
     resp[FB_RESPONSE_SZ] = 0;
 
     double start = -1;
@@ -604,4 +635,9 @@ int fb_execute_queue(usb_handle *usb)
 
     fprintf(stderr,"finished. total time: %.3fs\n", (now() - start));
     return status;
+}
+
+int fb_queue_is_empty(void)
+{
+    return (action_list == NULL);
 }

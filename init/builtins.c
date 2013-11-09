@@ -320,6 +320,14 @@ int do_mkdir(int nargs, char **args)
         if (_chown(args[1], uid, gid) < 0) {
             return -errno;
         }
+
+        /* chown may have cleared S_ISUID and S_ISGID, chmod again */
+        if (mode & (S_ISUID | S_ISGID)) {
+            ret = _chmod(args[1], mode);
+            if (ret == -1) {
+                return -errno;
+            }
+        }
     }
 
     return 0;
@@ -337,6 +345,12 @@ static struct {
     { "ro",         MS_RDONLY },
     { "rw",         0 },
     { "remount",    MS_REMOUNT },
+    { "bind",       MS_BIND },
+    { "rec",        MS_REC },
+    { "unbindable", MS_UNBINDABLE },
+    { "private",    MS_PRIVATE },
+    { "slave",      MS_SLAVE },
+    { "shared",     MS_SHARED },
     { "defaults",   0 },
     { 0,            0 },
 };
@@ -450,6 +464,7 @@ int do_mount_all(int nargs, char **args)
     int child_ret = -1;
     int status;
     const char *prop;
+    struct fstab *fstab;
 
     if (nargs != 2) {
         return -1;
@@ -473,7 +488,9 @@ int do_mount_all(int nargs, char **args)
     } else if (pid == 0) {
         /* child, call fs_mgr_mount_all() */
         klog_set_level(6);  /* So we can see what fs_mgr_mount_all() does */
-        child_ret = fs_mgr_mount_all(args[1]);
+        fstab = fs_mgr_read_fstab(args[1]);
+        child_ret = fs_mgr_mount_all(fstab);
+        fs_mgr_free_fstab(fstab);
         if (child_ret == -1) {
             ERROR("fs_mgr_mount_all returned an error\n");
         }
@@ -576,8 +593,7 @@ int do_restart(int nargs, char **args)
     struct service *svc;
     svc = service_find_by_name(args[1]);
     if (svc) {
-        service_stop(svc);
-        service_start(svc, NULL);
+        service_restart(svc);
     }
     return 0;
 }
@@ -740,34 +756,29 @@ int do_restorecon(int nargs, char **args) {
 }
 
 int do_setsebool(int nargs, char **args) {
-    SELboolean *b = alloca(nargs * sizeof(SELboolean));
-    char *v;
-    int i;
+    const char *name = args[1];
+    const char *value = args[2];
+    SELboolean b;
+    int ret;
 
     if (is_selinux_enabled() <= 0)
         return 0;
 
-    for (i = 1; i < nargs; i++) {
-        char *name = args[i];
-        v = strchr(name, '=');
-        if (!v) {
-            ERROR("setsebool: argument %s had no =\n", name);
-            return -EINVAL;
-        }
-        *v++ = 0;
-        b[i-1].name = name;
-        if (!strcmp(v, "1") || !strcasecmp(v, "true") || !strcasecmp(v, "on"))
-            b[i-1].value = 1;
-        else if (!strcmp(v, "0") || !strcasecmp(v, "false") || !strcasecmp(v, "off"))
-            b[i-1].value = 0;
-        else {
-            ERROR("setsebool: invalid value %s\n", v);
-            return -EINVAL;
-        }
+    b.name = name;
+    if (!strcmp(value, "1") || !strcasecmp(value, "true") || !strcasecmp(value, "on"))
+        b.value = 1;
+    else if (!strcmp(value, "0") || !strcasecmp(value, "false") || !strcasecmp(value, "off"))
+        b.value = 0;
+    else {
+        ERROR("setsebool: invalid value %s\n", value);
+        return -EINVAL;
     }
 
-    if (security_set_boolean_list(nargs - 1, b, 0) < 0)
-        return -errno;
+    if (security_set_boolean_list(1, &b, 0) < 0) {
+        ret = -errno;
+        ERROR("setsebool: could not set %s to %s\n", name, value);
+        return ret;
+    }
 
     return 0;
 }

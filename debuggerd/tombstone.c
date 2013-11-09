@@ -35,6 +35,9 @@
 #include <corkscrew/demangle.h>
 #include <corkscrew/backtrace.h>
 
+#include <sys/socket.h>
+#include <linux/un.h>
+
 #include <selinux/android.h>
 
 #include "machine.h"
@@ -46,6 +49,9 @@
 
 #define MAX_TOMBSTONES  10
 #define TOMBSTONE_DIR   "/data/tombstones"
+
+/* Must match the path defined in NativeCrashListener.java */
+#define NCRASH_SOCKET_PATH "/data/system/ndebugsocket"
 
 #define typecheck(x,y) {    \
     typeof(x) __dummy1;     \
@@ -84,6 +90,7 @@ static const char *get_signame(int sig)
 
 static const char *get_sigcode(int signo, int code)
 {
+    // Try the signal-specific codes...
     switch (signo) {
     case SIGILL:
         switch (code) {
@@ -122,8 +129,41 @@ static const char *get_sigcode(int signo, int code)
         case SEGV_ACCERR: return "SEGV_ACCERR";
         }
         break;
+    case SIGTRAP:
+        switch (code) {
+        case TRAP_BRKPT: return "TRAP_BRKPT";
+        case TRAP_TRACE: return "TRAP_TRACE";
+        }
+        break;
     }
+    // Then the other codes...
+    switch (code) {
+    case SI_USER:    return "SI_USER";
+#if defined(SI_KERNEL)
+    case SI_KERNEL:  return "SI_KERNEL";
+#endif
+    case SI_QUEUE:   return "SI_QUEUE";
+    case SI_TIMER:   return "SI_TIMER";
+    case SI_MESGQ:   return "SI_MESGQ";
+    case SI_ASYNCIO: return "SI_ASYNCIO";
+#if defined(SI_SIGIO)
+    case SI_SIGIO:   return "SI_SIGIO";
+#endif
+#if defined(SI_TKILL)
+    case SI_TKILL:   return "SI_TKILL";
+#endif
+    }
+    // Then give up...
     return "?";
+}
+
+static void dump_revision_info(log_t* log)
+{
+    char revision[PROPERTY_VALUE_MAX];
+
+    property_get("ro.revision", revision, "unknown");
+
+    _LOG(log, SCOPE_AT_FAULT, "Revision: '%s'\n", revision);
 }
 
 static void dump_build_info(log_t* log)
@@ -132,7 +172,7 @@ static void dump_build_info(log_t* log)
 
     property_get("ro.build.fingerprint", fingerprint, "unknown");
 
-    _LOG(log, false, "Build fingerprint: '%s'\n", fingerprint);
+    _LOG(log, SCOPE_AT_FAULT, "Build fingerprint: '%s'\n", fingerprint);
 }
 
 static void dump_fault_addr(log_t* log, pid_t tid, int sig)
@@ -141,14 +181,14 @@ static void dump_fault_addr(log_t* log, pid_t tid, int sig)
 
     memset(&si, 0, sizeof(si));
     if(ptrace(PTRACE_GETSIGINFO, tid, 0, &si)){
-        _LOG(log, false, "cannot get siginfo: %s\n", strerror(errno));
+        _LOG(log, SCOPE_AT_FAULT, "cannot get siginfo: %s\n", strerror(errno));
     } else if (signal_has_address(sig)) {
-        _LOG(log, false, "signal %d (%s), code %d (%s), fault addr %08x\n",
+        _LOG(log, SCOPE_AT_FAULT, "signal %d (%s), code %d (%s), fault addr %08x\n",
              sig, get_signame(sig),
              si.si_code, get_sigcode(sig, si.si_code),
              (uintptr_t) si.si_addr);
     } else {
-        _LOG(log, false, "signal %d (%s), code %d (%s), fault addr --------\n",
+        _LOG(log, SCOPE_AT_FAULT, "signal %d (%s), code %d (%s), fault addr --------\n",
              sig, get_signame(sig), si.si_code, get_sigcode(sig, si.si_code));
     }
 }
@@ -181,19 +221,20 @@ static void dump_thread_info(log_t* log, pid_t pid, pid_t tid, bool at_fault) {
             fclose(fp);
         }
 
-        _LOG(log, false, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", pid, tid,
+        _LOG(log, SCOPE_AT_FAULT, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", pid, tid,
                 threadname ? threadname : "UNKNOWN",
                 procname ? procname : "UNKNOWN");
     } else {
-        _LOG(log, true, "pid: %d, tid: %d, name: %s\n", pid, tid,
-                threadname ? threadname : "UNKNOWN");
+        _LOG(log, 0, "pid: %d, tid: %d, name: %s\n",
+                pid, tid, threadname ? threadname : "UNKNOWN");
     }
 }
 
 static void dump_backtrace(const ptrace_context_t* context __attribute((unused)),
         log_t* log, pid_t tid __attribute((unused)), bool at_fault,
         const backtrace_frame_t* backtrace, size_t frames) {
-    _LOG(log, !at_fault, "\nbacktrace:\n");
+    int scopeFlags = at_fault ? SCOPE_AT_FAULT : 0;
+    _LOG(log, scopeFlags, "\nbacktrace:\n");
 
     backtrace_symbol_t backtrace_symbols[STACK_DEPTH];
     get_backtrace_symbols_ptrace(context, backtrace, frames, backtrace_symbols);
@@ -201,13 +242,13 @@ static void dump_backtrace(const ptrace_context_t* context __attribute((unused))
         char line[MAX_BACKTRACE_LINE_LENGTH];
         format_backtrace_line(i, &backtrace[i], &backtrace_symbols[i],
                 line, MAX_BACKTRACE_LINE_LENGTH);
-        _LOG(log, !at_fault, "    %s\n", line);
+        _LOG(log, scopeFlags, "    %s\n", line);
     }
     free_backtrace_symbols(backtrace_symbols, frames);
 }
 
 static void dump_stack_segment(const ptrace_context_t* context, log_t* log, pid_t tid,
-        bool only_in_tombstone, uintptr_t* sp, size_t words, int label) {
+        int scopeFlags, uintptr_t* sp, size_t words, int label) {
     for (size_t i = 0; i < words; i++) {
         uint32_t stack_content;
         if (!try_get_word_ptrace(tid, *sp, &stack_content)) {
@@ -224,28 +265,28 @@ static void dump_stack_segment(const ptrace_context_t* context, log_t* log, pid_
             uint32_t offset = stack_content - (mi->start + symbol->start);
             if (!i && label >= 0) {
                 if (offset) {
-                    _LOG(log, only_in_tombstone, "    #%02d  %08x  %08x  %s (%s+%u)\n",
+                    _LOG(log, scopeFlags, "    #%02d  %08x  %08x  %s (%s+%u)\n",
                             label, *sp, stack_content, mi ? mi->name : "", symbol_name, offset);
                 } else {
-                    _LOG(log, only_in_tombstone, "    #%02d  %08x  %08x  %s (%s)\n",
+                    _LOG(log, scopeFlags, "    #%02d  %08x  %08x  %s (%s)\n",
                             label, *sp, stack_content, mi ? mi->name : "", symbol_name);
                 }
             } else {
                 if (offset) {
-                    _LOG(log, only_in_tombstone, "         %08x  %08x  %s (%s+%u)\n",
+                    _LOG(log, scopeFlags, "         %08x  %08x  %s (%s+%u)\n",
                             *sp, stack_content, mi ? mi->name : "", symbol_name, offset);
                 } else {
-                    _LOG(log, only_in_tombstone, "         %08x  %08x  %s (%s)\n",
+                    _LOG(log, scopeFlags, "         %08x  %08x  %s (%s)\n",
                             *sp, stack_content, mi ? mi->name : "", symbol_name);
                 }
             }
             free(demangled_name);
         } else {
             if (!i && label >= 0) {
-                _LOG(log, only_in_tombstone, "    #%02d  %08x  %08x  %s\n",
+                _LOG(log, scopeFlags, "    #%02d  %08x  %08x  %s\n",
                         label, *sp, stack_content, mi ? mi->name : "");
             } else {
-                _LOG(log, only_in_tombstone, "         %08x  %08x  %s\n",
+                _LOG(log, scopeFlags, "         %08x  %08x  %s\n",
                         *sp, stack_content, mi ? mi->name : "");
             }
         }
@@ -271,28 +312,28 @@ static void dump_stack(const ptrace_context_t* context, log_t* log, pid_t tid, b
         return;
     }
 
-    _LOG(log, !at_fault, "\nstack:\n");
+    int scopeFlags = SCOPE_SENSITIVE | (at_fault ? SCOPE_AT_FAULT : 0);
+    _LOG(log, scopeFlags, "\nstack:\n");
 
     // Dump a few words before the first frame.
-    bool only_in_tombstone = !at_fault;
     uintptr_t sp = backtrace[first].stack_top - STACK_WORDS * sizeof(uint32_t);
-    dump_stack_segment(context, log, tid, only_in_tombstone, &sp, STACK_WORDS, -1);
+    dump_stack_segment(context, log, tid, scopeFlags, &sp, STACK_WORDS, -1);
 
     // Dump a few words from all successive frames.
     // Only log the first 3 frames, put the rest in the tombstone.
     for (size_t i = first; i <= last; i++) {
         const backtrace_frame_t* frame = &backtrace[i];
         if (sp != frame->stack_top) {
-            _LOG(log, only_in_tombstone, "         ........  ........\n");
+            _LOG(log, scopeFlags, "         ........  ........\n");
             sp = frame->stack_top;
         }
         if (i - first == 3) {
-            only_in_tombstone = true;
+            scopeFlags &= (~SCOPE_AT_FAULT);
         }
         if (i == last) {
-            dump_stack_segment(context, log, tid, only_in_tombstone, &sp, STACK_WORDS, i);
+            dump_stack_segment(context, log, tid, scopeFlags, &sp, STACK_WORDS, i);
             if (sp < frame->stack_top + frame->stack_size) {
-                _LOG(log, only_in_tombstone, "         ........  ........\n");
+                _LOG(log, scopeFlags, "         ........  ........\n");
             }
         } else {
             size_t words = frame->stack_size / sizeof(uint32_t);
@@ -301,7 +342,7 @@ static void dump_stack(const ptrace_context_t* context, log_t* log, pid_t tid, b
             } else if (words > STACK_WORDS) {
                 words = STACK_WORDS;
             }
-            dump_stack_segment(context, log, tid, only_in_tombstone, &sp, words, i);
+            dump_stack_segment(context, log, tid, scopeFlags, &sp, words, i);
         }
     }
 }
@@ -316,11 +357,24 @@ static void dump_backtrace_and_stack(const ptrace_context_t* context, log_t* log
     }
 }
 
-static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t tid) {
+static void dump_map(log_t* log, map_info_t* m, const char* what, int scopeFlags) {
+    if (m != NULL) {
+        _LOG(log, scopeFlags, "    %08x-%08x %c%c%c %s\n", m->start, m->end,
+             m->is_readable ? 'r' : '-',
+             m->is_writable ? 'w' : '-',
+             m->is_executable ? 'x' : '-',
+             m->name);
+    } else {
+        _LOG(log, scopeFlags, "    (no %s)\n", what);
+    }
+}
+
+static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t tid, bool at_fault) {
+    int scopeFlags = SCOPE_SENSITIVE | (at_fault ? SCOPE_AT_FAULT : 0);
     siginfo_t si;
     memset(&si, 0, sizeof(si));
     if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si)) {
-        _LOG(log, false, "cannot get siginfo for %d: %s\n",
+        _LOG(log, scopeFlags, "cannot get siginfo for %d: %s\n",
                 tid, strerror(errno));
         return;
     }
@@ -334,7 +388,7 @@ static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t 
         return;
     }
 
-    _LOG(log, false, "\nmemory map around fault addr %08x:\n", (int)si.si_addr);
+    _LOG(log, scopeFlags, "\nmemory map around fault addr %08x:\n", (int)si.si_addr);
 
     /*
      * Search for a match, or for a hole where the match would be.  The list
@@ -362,21 +416,9 @@ static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t 
      * Show "next" then "match" then "prev" so that the addresses appear in
      * ascending order (like /proc/pid/maps).
      */
-    if (next != NULL) {
-        _LOG(log, false, "    %08x-%08x %s\n", next->start, next->end, next->name);
-    } else {
-        _LOG(log, false, "    (no map below)\n");
-    }
-    if (map != NULL) {
-        _LOG(log, false, "    %08x-%08x %s\n", map->start, map->end, map->name);
-    } else {
-        _LOG(log, false, "    (no map for address)\n");
-    }
-    if (prev != NULL) {
-        _LOG(log, false, "    %08x-%08x %s\n", prev->start, prev->end, prev->name);
-    } else {
-        _LOG(log, false, "    (no map above)\n");
-    }
+    dump_map(log, next, "map below", scopeFlags);
+    dump_map(log, map, "map for address", scopeFlags);
+    dump_map(log, prev, "map above", scopeFlags);
 }
 
 static void dump_thread(const ptrace_context_t* context, log_t* log, pid_t tid, bool at_fault,
@@ -387,7 +429,7 @@ static void dump_thread(const ptrace_context_t* context, log_t* log, pid_t tid, 
     dump_backtrace_and_stack(context, log, tid, at_fault);
     if (at_fault) {
         dump_memory_and_code(context, log, tid, at_fault);
-        dump_nearby_maps(context, log, tid);
+        dump_nearby_maps(context, log, tid, at_fault);
     }
 }
 
@@ -405,9 +447,8 @@ static bool dump_sibling_thread_report(const ptrace_context_t* context,
     }
 
     bool detach_failed = false;
-    struct dirent debuf;
-    struct dirent *de;
-    while (!readdir_r(d, &debuf, &de) && de) {
+    struct dirent* de;
+    while ((de = readdir(d)) != NULL) {
         /* Ignore "." and ".." */
         if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) {
             continue;
@@ -425,7 +466,7 @@ static bool dump_sibling_thread_report(const ptrace_context_t* context,
             continue;
         }
 
-        _LOG(log, true, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
+        _LOG(log, 0, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
         dump_thread_info(log, pid, new_tid, false);
         dump_thread(context, log, new_tid, false, total_sleep_time_usec);
 
@@ -478,12 +519,12 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
                 /* non-blocking EOF; we're done */
                 break;
             } else {
-                _LOG(log, true, "Error while reading log: %s\n",
+                _LOG(log, 0, "Error while reading log: %s\n",
                     strerror(errno));
                 break;
             }
         } else if (actual == 0) {
-            _LOG(log, true, "Got zero bytes while reading log: %s\n",
+            _LOG(log, 0, "Got zero bytes while reading log: %s\n",
                 strerror(errno));
             break;
         }
@@ -503,7 +544,7 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
         }
 
         if (first) {
-            _LOG(log, true, "--------- %slog %s\n",
+            _LOG(log, 0, "--------- %slog %s\n",
                 tailOnly ? "tail end of " : "", filename);
             first = false;
         }
@@ -545,7 +586,7 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
             shortLogNext = (shortLogNext + 1) % kShortLogMaxLines;
             shortLogCount++;
         } else {
-            _LOG(log, true, "%s.%03d %5d %5d %c %-8s: %s\n",
+            _LOG(log, 0, "%s.%03d %5d %5d %c %-8s: %s\n",
                 timeBuf, entry->nsec / 1000000, entry->pid, entry->tid,
                 prioChar, tag, msg);
         }
@@ -565,7 +606,7 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
         }
 
         for (i = 0; i < shortLogCount; i++) {
-            _LOG(log, true, "%s\n", shortLog[shortLogNext]);
+            _LOG(log, 0, "%s\n", shortLog[shortLogNext]);
             shortLogNext = (shortLogNext + 1) % kShortLogMaxLines;
         }
     }
@@ -583,24 +624,73 @@ static void dump_logs(log_t* log, pid_t pid, bool tailOnly)
     dump_log_file(log, pid, "/dev/log/main", tailOnly);
 }
 
+static void dump_abort_message(log_t* log, pid_t tid, uintptr_t address) {
+  if (address == 0) {
+    return;
+  }
+
+  address += sizeof(size_t); // Skip the buffer length.
+
+  char msg[512];
+  memset(msg, 0, sizeof(msg));
+  char* p = &msg[0];
+  while (p < &msg[sizeof(msg)]) {
+    uint32_t data;
+    if (!try_get_word_ptrace(tid, address, &data)) {
+      break;
+    }
+    address += sizeof(uint32_t);
+
+    if ((*p++ = (data >>  0) & 0xff) == 0) {
+      break;
+    }
+    if ((*p++ = (data >>  8) & 0xff) == 0) {
+      break;
+    }
+    if ((*p++ = (data >> 16) & 0xff) == 0) {
+      break;
+    }
+    if ((*p++ = (data >> 24) & 0xff) == 0) {
+      break;
+    }
+  }
+  msg[sizeof(msg) - 1] = '\0';
+
+  _LOG(log, SCOPE_AT_FAULT, "Abort message: '%s'\n", msg);
+}
+
 /*
  * Dumps all information about the specified pid to the tombstone.
  */
-static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal,
-        bool dump_sibling_threads, int* total_sleep_time_usec)
+static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t abort_msg_address,
+                       bool dump_sibling_threads, int* total_sleep_time_usec)
 {
     /* don't copy log messages to tombstone unless this is a dev device */
     char value[PROPERTY_VALUE_MAX];
     property_get("ro.debuggable", value, "0");
     bool want_logs = (value[0] == '1');
 
-    _LOG(log, false,
+    if (log->amfd >= 0) {
+        /*
+         * Activity Manager protocol: binary 32-bit network-byte-order ints for the
+         * pid and signal number, followed by the raw text of the dump, culminating
+         * in a zero byte that marks end-of-data.
+         */
+        uint32_t datum = htonl(pid);
+        TEMP_FAILURE_RETRY( write(log->amfd, &datum, 4) );
+        datum = htonl(signal);
+        TEMP_FAILURE_RETRY( write(log->amfd, &datum, 4) );
+    }
+
+    _LOG(log, SCOPE_AT_FAULT,
             "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
     dump_build_info(log);
+    dump_revision_info(log);
     dump_thread_info(log, pid, tid, true);
-    if(signal) {
+    if (signal) {
         dump_fault_addr(log, tid, signal);
     }
+    dump_abort_message(log, tid, abort_msg_address);
 
     ptrace_context_t* context = load_ptrace_context(tid);
     dump_thread(context, log, tid, true, total_sleep_time_usec);
@@ -619,6 +709,16 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal,
     if (want_logs) {
         dump_logs(log, pid, false);
     }
+
+    /* send EOD to the Activity Manager, then wait for its ack to avoid racing ahead
+     * and killing the target out from under it */
+    if (log->amfd >= 0) {
+        uint8_t eodMarker = 0;
+        TEMP_FAILURE_RETRY( write(log->amfd, &eodMarker, 1) );
+        /* 3 sec timeout reading the ack; we're fine if that happens */
+        TEMP_FAILURE_RETRY( read(log->amfd, &eodMarker, 1) );
+    }
+
     return detach_failed;
 }
 
@@ -678,7 +778,36 @@ static char* find_and_open_tombstone(int* fd)
     return strdup(path);
 }
 
-char* engrave_tombstone(pid_t pid, pid_t tid, int signal,
+static int activity_manager_connect() {
+    int amfd = socket(PF_UNIX, SOCK_STREAM, 0);
+    if (amfd >= 0) {
+        struct sockaddr_un address;
+        int err;
+
+        memset(&address, 0, sizeof(address));
+        address.sun_family = AF_UNIX;
+        strncpy(address.sun_path, NCRASH_SOCKET_PATH, sizeof(address.sun_path));
+        err = TEMP_FAILURE_RETRY( connect(amfd, (struct sockaddr*) &address, sizeof(address)) );
+        if (!err) {
+            struct timeval tv;
+            memset(&tv, 0, sizeof(tv));
+            tv.tv_sec = 1;  // tight leash
+            err = setsockopt(amfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+            if (!err) {
+                tv.tv_sec = 3;  // 3 seconds on handshake read
+                err = setsockopt(amfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+            }
+        }
+        if (err) {
+            close(amfd);
+            amfd = -1;
+        }
+    }
+
+    return amfd;
+}
+
+char* engrave_tombstone(pid_t pid, pid_t tid, int signal, uintptr_t abort_msg_address,
         bool dump_sibling_threads, bool quiet, bool* detach_failed,
         int* total_sleep_time_usec) {
     mkdir(TOMBSTONE_DIR, 0755);
@@ -698,10 +827,12 @@ char* engrave_tombstone(pid_t pid, pid_t tid, int signal,
 
     log_t log;
     log.tfd = fd;
+    log.amfd = activity_manager_connect();
     log.quiet = quiet;
-    *detach_failed = dump_crash(&log, pid, tid, signal, dump_sibling_threads,
+    *detach_failed = dump_crash(&log, pid, tid, signal, abort_msg_address, dump_sibling_threads,
             total_sleep_time_usec);
 
+    close(log.amfd);
     close(fd);
     return path;
 }

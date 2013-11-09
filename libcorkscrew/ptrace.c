@@ -21,6 +21,7 @@
 #include <corkscrew/ptrace.h>
 
 #include <errno.h>
+#include <stdlib.h>
 #include <sys/ptrace.h>
 #include <cutils/log.h>
 
@@ -45,21 +46,25 @@ void init_memory_ptrace(memory_t* memory, pid_t tid) {
 }
 
 bool try_get_word(const memory_t* memory, uintptr_t ptr, uint32_t* out_value) {
-    ALOGV("try_get_word: reading word at 0x%08x", ptr);
+    ALOGV("try_get_word: reading word at %p", (void*) ptr);
     if (ptr & 3) {
-        ALOGV("try_get_word: invalid pointer 0x%08x", ptr);
+        ALOGV("try_get_word: invalid pointer %p", (void*) ptr);
         *out_value = 0xffffffffL;
         return false;
     }
     if (memory->tid < 0) {
         if (!is_readable_map(memory->map_info_list, ptr)) {
-            ALOGV("try_get_word: pointer 0x%08x not in a readable map", ptr);
+            ALOGV("try_get_word: pointer %p not in a readable map", (void*) ptr);
             *out_value = 0xffffffffL;
             return false;
         }
         *out_value = *(uint32_t*)ptr;
         return true;
     } else {
+#if defined(__APPLE__)
+        ALOGV("no ptrace on Mac OS");
+        return false;
+#else
         // ptrace() returns -1 and sets errno when the operation fails.
         // To disambiguate -1 from a valid result, we clear errno beforehand.
         errno = 0;
@@ -70,6 +75,7 @@ bool try_get_word(const memory_t* memory, uintptr_t ptr, uint32_t* out_value) {
             return false;
         }
         return true;
+#endif
     }
 }
 
@@ -128,6 +134,7 @@ void free_ptrace_context(ptrace_context_t* context) {
         free_ptrace_map_info_data(mi);
     }
     free_map_info_list(context->map_info_list);
+    free(context);
 }
 
 void find_symbol_ptrace(const ptrace_context_t* context,

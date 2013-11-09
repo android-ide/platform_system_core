@@ -19,7 +19,7 @@
 #define LOOPDEV_MAXLEN 64
 
 struct mount_opts {
-	const char str[8];
+	const char str[16];
 	unsigned long rwmask;
 	unsigned long rwset;
 	unsigned long rwnoset;
@@ -49,21 +49,27 @@ static const struct mount_opts options[] = {
 	{ "exec",	MS_NOEXEC,	0,		MS_NOEXEC	},
 	{ "move",	MS_TYPE,	MS_MOVE,	0		},
 	{ "recurse",	MS_REC,		MS_REC,		0		},
+	{ "rec",	MS_REC,		MS_REC,		0		},
 	{ "remount",	MS_TYPE,	MS_REMOUNT,	0		},
 	{ "ro",		MS_RDONLY,	MS_RDONLY,	0		},
 	{ "rw",		MS_RDONLY,	0,		MS_RDONLY	},
 	{ "suid",	MS_NOSUID,	0,		MS_NOSUID	},
 	{ "sync",	MS_SYNCHRONOUS,	MS_SYNCHRONOUS,	0		},
 	{ "verbose",	MS_VERBOSE,	MS_VERBOSE,	0		},
+	{ "unbindable",	MS_UNBINDABLE,	MS_UNBINDABLE,	0		},
+	{ "private",	MS_PRIVATE,	MS_PRIVATE,	0		},
+	{ "slave",	MS_SLAVE,	MS_SLAVE,	0		},
+	{ "shared",	MS_SHARED,	MS_SHARED,	0		},
 };
 
 static void add_extra_option(struct extra_opts *extra, char *s)
 {
 	int len = strlen(s);
-	int newlen = extra->used_size + len;
+	int newlen;
 
 	if (extra->str)
 	       len++;			/* +1 for ',' */
+	newlen = extra->used_size + len;
 
 	if (newlen >= extra->alloc_size) {
 		char *new;
@@ -74,7 +80,7 @@ static void add_extra_option(struct extra_opts *extra, char *s)
 
 		extra->str = new;
 		extra->end = extra->str + extra->used_size;
-		extra->alloc_size = newlen;
+		extra->alloc_size = newlen + 1;
 	}
 
 	if (extra->used_size) {
