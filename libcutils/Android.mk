@@ -105,6 +105,10 @@ LOCAL_SRC_FILES := $(commonSources) \
 
 ifeq ($(TARGET_ARCH),arm)
 LOCAL_SRC_FILES += arch-arm/memset32.S
+
+# atomics now require armv6
+LOCAL_CFLAGS += -march=armv6
+
 else  # !arm
 ifeq ($(TARGET_ARCH_VARIANT),x86-atom)
 LOCAL_CFLAGS += -DHAVE_MEMSET16 -DHAVE_MEMSET32
