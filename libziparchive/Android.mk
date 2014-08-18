@@ -30,8 +30,19 @@ LOCAL_SHARED_LIBRARIES := libutils
 LOCAL_MODULE:= libziparchive
 
 LOCAL_C_INCLUDES += ${includes}
+
+
+ifdef AIDE_BUILD
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
+endif
+
+
 LOCAL_CFLAGS := -Werror
 include $(BUILD_STATIC_LIBRARY)
+
+
+ifndef AIDE_BUILD
+ 
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libziparchive
@@ -72,3 +83,5 @@ LOCAL_STATIC_LIBRARIES := libziparchive-host \
 	liblog \
 	libutils
 include $(BUILD_HOST_NATIVE_TEST)
+
+endif # AIDE_BUILD
