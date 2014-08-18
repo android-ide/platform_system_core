@@ -32,7 +32,7 @@
 #endif
 
 int android_set_ioprio(int pid __android_unused, IoSchedClass clazz __android_unused, int ioprio __android_unused) {
-#ifdef HAVE_ANDROID_OS
+#if defined(HAVE_ANDROID_OS) && !defined(AIDE_BUILD)
     if (syscall(SYS_ioprio_set, IOPRIO_WHO_PROCESS, pid, ioprio | (clazz << IOPRIO_CLASS_SHIFT))) {
         return -1;
     }
@@ -41,7 +41,7 @@ int android_set_ioprio(int pid __android_unused, IoSchedClass clazz __android_un
 }
 
 int android_get_ioprio(int pid __android_unused, IoSchedClass *clazz, int *ioprio) {
-#ifdef HAVE_ANDROID_OS
+#if defined(HAVE_ANDROID_OS) && !defined(AIDE_BUILD)
     int rc;
 
     if ((rc = syscall(SYS_ioprio_get, IOPRIO_WHO_PROCESS, pid)) < 0) {

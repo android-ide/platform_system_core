@@ -72,6 +72,8 @@ ifneq ($(WINDOWS_HOST_ONLY),1)
 endif
 
 
+ifndef AIDE_BUILD
+
 # Static library for host
 # ========================================================
 LOCAL_MODULE := libcutils
@@ -113,6 +115,8 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_HOST_EXECUTABLE)
 
+endif # AIDE_BUILD
+
 
 # Shared and static library for target
 # ========================================================
@@ -151,10 +155,26 @@ LOCAL_CFLAGS_x86 += -DHAVE_MEMSET16 -DHAVE_MEMSET32
 LOCAL_CFLAGS_x86_64 += -DHAVE_MEMSET16 -DHAVE_MEMSET32
 
 LOCAL_C_INCLUDES := $(libcutils_c_includes)
+
+
+ifdef AIDE_BUILD
+
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
+
+ifeq ($(TARGET_ARCH),arm)
+    LOCAL_CFLAGS += -march=armv6
+endif
+
+endif # AIDE_BUILD
+
+
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(targetSmpFlag) -Werror
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_STATIC_LIBRARY)
+
+
+ifndef AIDE_BUILD
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils
@@ -177,3 +197,5 @@ LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_EXECUTABLE)
 
 include $(call all-makefiles-under,$(LOCAL_PATH))
+
+endif # AIDE_BUILD
