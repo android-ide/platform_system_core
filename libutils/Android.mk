@@ -59,6 +59,9 @@ host_commonLdlibs += -lrt -ldl
 endif
 
 
+ifndef AIDE_BUILD
+
+
 # For the host
 # =====================================================
 include $(CLEAR_VARS)
@@ -86,6 +89,9 @@ LOCAL_CFLAGS += $(host_commonCflags) -m64
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
+endif # AIDE_BUILD
+
+
 # For the device, static
 # =====================================================
 include $(CLEAR_VARS)
@@ -100,11 +106,21 @@ LOCAL_SRC_FILES:= \
 ifeq ($(TARGET_ARCH),mips)
 LOCAL_CFLAGS += -DALIGN_DOUBLE
 endif
+
+ifndef AIDE_BUILD
 LOCAL_CFLAGS += -Werror
+endif
+
 
 LOCAL_C_INCLUDES += \
 		bionic/libc/private \
 		external/zlib
+
+ifdef AIDE_BUILD
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include/utils
+endif
+
 
 LOCAL_STATIC_LIBRARIES := \
 	libcutils
@@ -114,10 +130,16 @@ LOCAL_SHARED_LIBRARIES := \
         liblog \
         libdl
 
+ifndef AIDE_BUILD
 include external/stlport/libstlport.mk
+endif AIDE_BUILD
 
 LOCAL_MODULE:= libutils
 include $(BUILD_STATIC_LIBRARY)
+
+
+ifndef AIDE_BUILD
+
 
 # For the device, shared
 # =====================================================
@@ -143,3 +165,5 @@ include $(BUILD_SHARED_LIBRARY)
 ifeq (,$(ONE_SHOT_MAKEFILE))
 include $(call first-makefiles-under,$(LOCAL_PATH))
 endif
+
+endif # AIDE_BUILD

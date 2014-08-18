@@ -28,7 +28,7 @@
 # include <pthread.h>
 # include <sched.h>
 # include <sys/resource.h>
-#ifdef HAVE_ANDROID_OS
+#if defined(HAVE_ANDROID_OS) && !defined(AIDE_BUILD)
 # include <bionic_pthread.h>
 #endif
 #elif defined(HAVE_WIN32_THREADS)
@@ -47,7 +47,7 @@
 
 #include <cutils/sched_policy.h>
 
-#ifdef HAVE_ANDROID_OS
+#if defined(HAVE_ANDROID_OS) && !defined(AIDE_BUILD)
 # define __android_unused
 #else
 # define __android_unused __attribute__((__unused__))
@@ -134,7 +134,7 @@ int androidCreateRawThreadEtc(android_thread_func_t entryFunction,
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-#ifdef HAVE_ANDROID_OS  /* valgrind is rejecting RT-priority create reqs */
+#if defined(HAVE_ANDROID_OS) && !defined(AIDE_BUILD) /* valgrind is rejecting RT-priority create reqs */
     if (threadPriority != PRIORITY_DEFAULT || threadName != NULL) {
         // Now that the pthread_t has a method to find the associated
         // android_thread_id_t (pid) from pthread_t, it would be possible to avoid
@@ -178,7 +178,7 @@ int androidCreateRawThreadEtc(android_thread_func_t entryFunction,
     return 1;
 }
 
-#ifdef HAVE_ANDROID_OS
+#if defined(HAVE_ANDROID_OS) && !defined(AIDE_BUILD)
 static pthread_t android_thread_id_t_to_pthread(android_thread_id_t thread)
 {
     return (pthread_t) thread;
@@ -315,7 +315,7 @@ pid_t androidGetTid()
 #endif
 }
 
-#ifdef HAVE_ANDROID_OS
+#if defined(HAVE_ANDROID_OS) && !defined(AIDE_BUILD)
 int androidSetThreadPriority(pid_t tid, int pri)
 {
     int rc = 0;
@@ -675,7 +675,7 @@ Thread::Thread(bool canCallJava)
         mLock("Thread::mLock"),
         mStatus(NO_ERROR),
         mExitPending(false), mRunning(false)
-#ifdef HAVE_ANDROID_OS
+#if defined(HAVE_ANDROID_OS) && !defined(AIDE_BUILD)
         , mTid(-1)
 #endif
 {
@@ -745,7 +745,7 @@ int Thread::_threadLoop(void* user)
     wp<Thread> weak(strong);
     self->mHoldSelf.clear();
 
-#ifdef HAVE_ANDROID_OS
+#if defined(HAVE_ANDROID_OS) && !defined(AIDE_BUILD)
     // this is very useful for debugging with gdb
     self->mTid = gettid();
 #endif
@@ -856,7 +856,7 @@ bool Thread::isRunning() const {
     return mRunning;
 }
 
-#ifdef HAVE_ANDROID_OS
+#if defined(HAVE_ANDROID_OS) && !defined(AIDE_BUILD)
 pid_t Thread::getTid() const
 {
     // mTid is not defined until the child initializes it, and the caller may need it earlier
