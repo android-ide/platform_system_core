@@ -331,7 +331,7 @@ int __android_log_write(int prio, const char *tag, const char *msg)
             tag = tmp_tag;
     }
 
-#if __BIONIC__
+#if __BIONIC__ && !defined(AIDE_BUILD)
     if (prio == ANDROID_LOG_FATAL) {
         extern void __android_set_abort_message(const char*);
         __android_set_abort_message(msg);
