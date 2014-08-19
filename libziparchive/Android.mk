@@ -36,8 +36,10 @@ ifdef AIDE_BUILD
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
 endif
 
-
+ifndef AIDE_BUILD
 LOCAL_CFLAGS := -Werror
+endif
+
 include $(BUILD_STATIC_LIBRARY)
 
 
