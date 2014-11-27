@@ -31,7 +31,9 @@
 #include <utils/FileMap.h>
 #include <zlib.h>
 
+#ifndef AIDE_BUILD
 #include <JNIHelp.h>  // TEMP_FAILURE_RETRY may or may not be in unistd
+#endif
 
 #include "ziparchive/zip_archive.h"
 

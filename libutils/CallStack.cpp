@@ -1,3 +1,4 @@
+#ifndef AIDE_BUILD
 /*
  * Copyright (C) 2007 The Android Open Source Project
  *
@@ -75,3 +76,5 @@ void CallStack::print(Printer& printer) const {
 }
 
 }; // namespace android
+
+#endif // AIDE_BUILD

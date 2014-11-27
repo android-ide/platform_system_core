@@ -31,8 +31,12 @@
 #include <time.h>
 #include <unistd.h>
 
-#ifdef __BIONIC__
+#if defined(__BIONIC__) && !defined(AIDE_BUILD)
 #include <android/set_abort_message.h>
+#endif
+
+#if defined(AIDE_BUILD)
+#define SOCK_CLOEXEC O_CLOEXEC
 #endif
 
 #include <log/logd.h>
@@ -334,7 +338,7 @@ int __android_log_write(int prio, const char *tag, const char *msg)
             tag = tmp_tag;
     }
 
-#if __BIONIC__
+#if __BIONIC__ && !defined(AIDE_BUILD)
     if (prio == ANDROID_LOG_FATAL) {
         android_set_abort_message(msg);
     }

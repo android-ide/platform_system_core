@@ -21,6 +21,10 @@
 #include <string.h>
 #include <unistd.h>
 
+#ifdef AIDE_BUILD
+#define SOCK_CLOEXEC O_CLOEXEC
+#endif
+
 #include <cutils/debugger.h>
 #include <cutils/sockets.h>
 

@@ -23,6 +23,10 @@
 #include <string.h>
 #include <unistd.h>
 
+#ifdef AIDE_BUILD
+#include <linux/sched.h>
+#endif
+
 #include <cutils/sched_policy.h>
 #include <log/log.h>
 

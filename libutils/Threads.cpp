@@ -27,8 +27,11 @@
 #if defined(HAVE_PTHREADS)
 # include <pthread.h>
 # include <sched.h>
+#ifdef AIDE_BUILD
+#undef HAVE_ANDROID_OS
+#endif
 # include <sys/resource.h>
-#ifdef HAVE_ANDROID_OS
+#if defined(HAVE_ANDROID_OS) && !defined(AIDE_BUILD)
 # include <private/bionic_pthread.h>
 #endif
 #elif defined(HAVE_WIN32_THREADS)

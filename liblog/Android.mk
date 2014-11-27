@@ -53,6 +53,8 @@ else
 liblog_target_sources += log_read_kern.c
 endif
 
+ifndef AIDE_BUILD
+
 # Shared and static library for host
 # ========================================================
 LOCAL_MODULE := liblog
@@ -70,6 +72,7 @@ endif
 LOCAL_MULTILIB := both
 include $(BUILD_HOST_SHARED_LIBRARY)
 
+endif # AIDE_BUILD
 
 # Shared and static library for target
 # ========================================================
@@ -77,12 +80,21 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_SRC_FILES := $(liblog_target_sources)
 LOCAL_CFLAGS := -Werror
+
+ifdef AIDE_BUILD
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
+endif # AIDE_BUILD
+
 include $(BUILD_STATIC_LIBRARY)
+
+ifndef AIDE_BUILD
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_WHOLE_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS := -Werror
 include $(BUILD_SHARED_LIBRARY)
+
+endif # AIDE_BUILD
 
 include $(call first-makefiles-under,$(LOCAL_PATH))

@@ -71,7 +71,9 @@ LOCAL_MODULE:= libutils
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(host_commonCflags)
 LOCAL_MULTILIB := both
+ifndef AIDE_BUILD
 include $(BUILD_HOST_STATIC_LIBRARY)
+endif # AIDE_BUILD
 
 
 # For the device, static
@@ -94,6 +96,10 @@ LOCAL_C_INCLUDES += \
 		bionic/libc \
 		external/zlib
 
+ifdef AIDE_BUILD
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
+endif # AIDE_BUILD
+
 LOCAL_STATIC_LIBRARIES := \
 	libcutils
 
@@ -102,7 +108,9 @@ LOCAL_SHARED_LIBRARIES := \
         liblog \
         libdl
 
+ifndef AIDE_BUILD
 include external/stlport/libstlport.mk
+endif # AIDE_BUILD
 
 LOCAL_MODULE:= libutils
 include $(BUILD_STATIC_LIBRARY)
@@ -119,9 +127,13 @@ LOCAL_SHARED_LIBRARIES := \
         liblog
 LOCAL_CFLAGS := -Werror
 
+ifndef AIDE_BUILD
+
 include external/stlport/libstlport.mk
 
 include $(BUILD_SHARED_LIBRARY)
+
+endif
 
 # Include subdirectory makefiles
 # ============================================================
