@@ -29,6 +29,10 @@ liblog_host_sources := $(liblog_sources) fake_log_device.c event.logtags
 liblog_target_sources := $(liblog_sources) event_tag_map.c
 liblog_target_sources += log_time.cpp log_is_loggable.c logprint.c log_read.c
 
+
+ifndef AIDE_BUILD
+
+
 # Shared and static library for host
 # ========================================================
 LOCAL_MODULE := liblog
@@ -54,6 +58,9 @@ LOCAL_MODULE_HOST_OS := darwin linux windows
 include $(BUILD_HOST_SHARED_LIBRARY)
 
 
+endif # AIDE_BUILD
+
+
 # Shared and static library for target
 # ========================================================
 include $(CLEAR_VARS)
@@ -62,7 +69,16 @@ LOCAL_SRC_FILES := $(liblog_target_sources)
 LOCAL_CFLAGS := -Werror $(liblog_cflags)
 # AddressSanitizer runtime library depends on liblog.
 LOCAL_SANITIZE := never
+
+ifdef AIDE_BUILD
+    LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
+endif # AIDE_BUILD
+
 include $(BUILD_STATIC_LIBRARY)
+
+
+ifndef AIDE_BUILD
+
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
@@ -78,3 +94,5 @@ LOCAL_CXX_STL := none
 include $(BUILD_SHARED_LIBRARY)
 
 include $(call first-makefiles-under,$(LOCAL_PATH))
+
+endif # AIDE_BUILD
