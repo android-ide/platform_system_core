@@ -35,7 +35,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#ifdef __BIONIC__
+#if defined(__BIONIC__) && !defined(AIDE_BUILD)
 #include <android/set_abort_message.h>
 #endif
 
@@ -51,6 +51,10 @@
 #if FAKE_LOG_DEVICE
 /* This will be defined when building for the host. */
 #include "fake_log_device.h"
+#endif
+
+#ifdef AIDE_BUILD
+#define SOCK_CLOEXEC O_CLOEXEC
 #endif
 
 static int __write_to_log_init(log_id_t, struct iovec *vec, size_t nr);
