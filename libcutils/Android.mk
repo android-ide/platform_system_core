@@ -58,6 +58,8 @@ libcutils_windows_host_sources := \
         socket_network_client_windows.c \
         sockets_windows.cpp \
 
+ifndef AIDE_BUILD
+
 # Shared and static library for host
 # Note: when linking this library on Windows, you must also link to Winsock2
 # using "LOCAL_LDLIBS_windows := -lws2_32".
@@ -84,6 +86,8 @@ LOCAL_MULTILIB := both
 include $(BUILD_HOST_SHARED_LIBRARY)
 
 
+endif # AIDE_BUILD
+
 
 # Shared and static library for target
 # ========================================================
@@ -92,15 +96,23 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils
 LOCAL_SRC_FILES := $(libcutils_common_sources) \
         $(libcutils_nonwindows_sources) \
-        android_reboot.c \
         ashmem-dev.c \
         debugger.c \
         klog.c \
         partition_utils.c \
-        properties.c \
         qtaguid.c \
         trace-dev.c \
         uevent.c \
+
+
+ifndef AIDE_BUILD
+
+LOCAL_SRC_FILES += \
+        android_reboot.c \
+        properties.c \
+
+endif # AIDE_BUILD
+
 
 LOCAL_SRC_FILES_arm += arch-arm/memset32.S
 LOCAL_SRC_FILES_arm64 += arch-arm64/android_memset.S
@@ -117,14 +129,24 @@ LOCAL_SRC_FILES_x86_64 += \
         arch-x86_64/android_memset32.S \
 
 LOCAL_C_INCLUDES := $(libcutils_c_includes)
+
+ifdef AIDE_BUILD
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
+endif # AIDE_BUILD
+
 LOCAL_STATIC_LIBRARIES := liblog
 ifneq ($(ENABLE_CPUSETS),)
 LOCAL_CFLAGS += -DUSE_CPUSETS
 endif
-LOCAL_CFLAGS += -Werror -Wall -Wextra -std=gnu90
+LOCAL_CFLAGS += -Werror -Wall -Wextra
+LOCAL_CONLYFLAGS += -std=gnu90
 LOCAL_CLANG := true
 LOCAL_SANITIZE := integer
 include $(BUILD_STATIC_LIBRARY)
+
+
+ifndef AIDE_BUILD
+
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils
@@ -142,3 +164,6 @@ LOCAL_SANITIZE := integer
 include $(BUILD_SHARED_LIBRARY)
 
 include $(call all-makefiles-under,$(LOCAL_PATH))
+
+
+endif # AIDE_BUILD
