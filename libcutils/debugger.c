@@ -29,6 +29,10 @@
 #define LOG_TAG "DEBUG"
 #include <log/log.h>
 
+#ifdef AIDE_BUILD
+#define SOCK_CLOEXEC O_CLOEXEC
+#endif
+
 static int send_request(int sock_fd, void* msg_ptr, size_t msg_len) {
   int result = 0;
   if (TEMP_FAILURE_RETRY(write(sock_fd, msg_ptr, msg_len)) != (ssize_t) msg_len) {
