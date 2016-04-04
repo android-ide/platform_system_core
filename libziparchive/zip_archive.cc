@@ -806,7 +806,7 @@ class FileWriter : public Writer {
     }
 
     int result = 0;
-#if defined(__linux__)
+#if defined(__linux__) && !defined(AIDE_BUILD)
     if (declared_length > 0) {
       // Make sure we have enough space on the volume to extract the compressed
       // entry. Note that the call to ftruncate below will change the file size but
