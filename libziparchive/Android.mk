@@ -45,7 +45,18 @@ LOCAL_SHARED_LIBRARIES := libutils libbase
 LOCAL_MODULE:= libziparchive
 LOCAL_CFLAGS := $(libziparchive_common_c_flags)
 LOCAL_CPPFLAGS := $(libziparchive_common_cpp_flags)
+
+ifdef AIDE_BUILD
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../base/include
+LOCAL_CPPFLAGS += -std=gnu++11
+endif
+
 include $(BUILD_STATIC_LIBRARY)
+
+
+ifndef AIDE_BUILD
+
 
 include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION := .cc
@@ -104,3 +115,6 @@ LOCAL_STATIC_LIBRARIES := \
 
 LOCAL_MODULE_HOST_OS := darwin linux windows
 include $(BUILD_HOST_NATIVE_TEST)
+
+
+endif # AIDE_BUILD
