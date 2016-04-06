@@ -721,7 +721,7 @@ int Thread::_threadLoop(void* user)
     wp<Thread> weak(strong);
     self->mHoldSelf.clear();
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) && !defined(AIDE_BUILD)
     // this is very useful for debugging with gdb
     self->mTid = gettid();
 #endif
@@ -832,7 +832,7 @@ bool Thread::isRunning() const {
     return mRunning;
 }
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) && !defined(AIDE_BUILD)
 pid_t Thread::getTid() const
 {
     // mTid is not defined until the child initializes it, and the caller may need it earlier

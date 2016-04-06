@@ -107,10 +107,14 @@ int32_t property_get_int32(const char *key, int32_t default_value) {
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
+#ifndef AIDE_BUILD
+
 int property_set(const char *key, const char *value)
 {
     return __system_property_set(key, value);
 }
+
+#endif
 
 int property_get(const char *key, char *value, const char *default_value)
 {
@@ -130,6 +134,8 @@ int property_get(const char *key, char *value, const char *default_value)
     }
     return len;
 }
+
+#ifndef AIDE_BUILD
 
 struct property_list_callback_data
 {
@@ -154,3 +160,5 @@ int property_list(
     struct property_list_callback_data data = { propfn, cookie };
     return __system_property_foreach(property_list_callback, &data);
 }
+
+#endif // AIDE_BUILD

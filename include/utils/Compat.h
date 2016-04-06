@@ -45,6 +45,10 @@ static inline ssize_t pwrite64(int fd, const void* buf, size_t nbytes, off64_t o
 #define DEFFILEMODE 0666
 #endif /* _WIN32 */
 
+#if defined(AIDE_BUILD)
+#define DEFFILEMODE 0666
+#endif /* AIDE_BUILD */
+
 #if defined(_WIN32)
 #define ZD "%ld"
 #define ZD_TYPE long
