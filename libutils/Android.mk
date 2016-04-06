@@ -39,6 +39,10 @@ commonSources:= \
 
 host_commonCflags := -DLIBUTILS_NATIVE=1 $(TOOL_CFLAGS) -Werror
 
+
+ifndef AIDE_BUILD
+
+
 # For the host
 # =====================================================
 include $(CLEAR_VARS)
@@ -54,6 +58,9 @@ LOCAL_MULTILIB := both
 LOCAL_MODULE_HOST_OS := darwin linux windows
 LOCAL_C_INCLUDES += external/safe-iop/include
 include $(BUILD_HOST_STATIC_LIBRARY)
+
+
+endif # AIDE_BUILD
 
 
 # For the device, static
@@ -83,11 +90,24 @@ LOCAL_SHARED_LIBRARIES := \
         liblog \
         libdl
 
+#ifdef AIDE_BUILD
+LOCAL_C_INCLUDES += \
+        $(LOCAL_PATH)/../include \
+        $(LOCAL_PATH)/../../../external/safe-iop/include \
+
+LOCAL_CFLAGS=-std=gnu++11
+#endif
+
+
 LOCAL_MODULE := libutils
 LOCAL_CLANG := true
 LOCAL_SANITIZE := integer
 LOCAL_C_INCLUDES += external/safe-iop/include
 include $(BUILD_STATIC_LIBRARY)
+
+
+ifndef AIDE_BUILD
+
 
 # For the device, shared
 # =====================================================
@@ -125,3 +145,6 @@ include $(BUILD_HOST_NATIVE_TEST)
 
 # Build the tests in the tests/ subdirectory.
 include $(call first-makefiles-under,$(LOCAL_PATH))
+
+
+endif # AIDE_BUILD
