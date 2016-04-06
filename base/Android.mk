@@ -69,7 +69,17 @@ LOCAL_CPPFLAGS := $(libbase_cppflags) $(libbase_linux_cppflags)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_MULTILIB := both
+
+ifdef AIDE_BUILD
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
+LOCAL_CPPFLAGS += -std=gnu++11
+endif
+
 include $(BUILD_STATIC_LIBRARY)
+
+
+ifndef AIDE_BUILD
+
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libbase
@@ -138,3 +148,5 @@ LOCAL_MULTILIB := both
 LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
 LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
 include $(BUILD_HOST_NATIVE_TEST)
+
+endif # AIDE_BUILD
