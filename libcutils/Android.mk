@@ -107,9 +107,17 @@ LOCAL_SRC_FILES := $(libcutils_common_sources) \
 
 ifndef AIDE_BUILD
 
+
 LOCAL_SRC_FILES += \
         android_reboot.c \
         properties.c \
+
+else
+
+
+LOCAL_SRC_FILES += \
+        properties.c \
+
 
 endif # AIDE_BUILD
 
