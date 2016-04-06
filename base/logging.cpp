@@ -29,6 +29,7 @@
 #include <errno.h>
 #endif
 
+
 #include <iostream>
 #include <limits>
 #include <sstream>
@@ -45,7 +46,7 @@
 #include "cutils/threads.h"
 
 // Headers for LogMessage::LogLine.
-#ifdef __ANDROID__
+#if defined(__ANDROID__) && !defined(AIDE_BUILD)
 #include <android/set_abort_message.h>
 #include "cutils/log.h"
 #else
@@ -94,6 +95,10 @@ using std::lock_guard;
 #if defined(__GLIBC__)
 const char* getprogname() {
   return program_invocation_short_name;
+}
+#elif defined(AIDE_BUILD)
+const char* getprogname() {
+  return "UNKNOWN";
 }
 #endif
 
@@ -195,7 +200,7 @@ void StderrLogger(LogId, LogSeverity severity, const char*, const char* file,
 }
 
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) && !defined(AIDE_BUILD)
 LogdLogger::LogdLogger(LogId default_log_id) : default_log_id_(default_log_id) {
 }
 
@@ -398,7 +403,7 @@ LogMessage::~LogMessage() {
 
   // Abort if necessary.
   if (data_->GetSeverity() == FATAL) {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) && !defined(AIDE_BUILD)
     android_set_abort_message(msg.c_str());
 #endif
     abort();

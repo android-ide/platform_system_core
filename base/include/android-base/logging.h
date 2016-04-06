@@ -29,6 +29,10 @@
 #include <memory>
 #include <ostream>
 
+#ifdef AIDE_BUILD
+#include <errno.h>
+#endif
+
 #include "android-base/macros.h"
 
 namespace android {
